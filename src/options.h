@@ -98,16 +98,7 @@
 //#define JL_GF_PROFILE
 
 
-// task options ---------------------------------------------------------------
-
-// select an implementation of stack switching.
-// currently only COPY_STACKS is recommended.
-#ifndef COPY_STACKS
-#define COPY_STACKS
-#endif
-
-
-// threading options ----------------------------------------------------------
+// task and threading options -------------------------------------------------
 
 // controls for when threads sleep
 #define THREAD_SLEEP_THRESHOLD_NAME     "JULIA_THREAD_SLEEP_THRESHOLD"
@@ -122,6 +113,17 @@
 // affinitization behavior
 #define MACHINE_EXCLUSIVE_NAME          "JULIA_EXCLUSIVE"
 #define DEFAULT_MACHINE_EXCLUSIVE       0
+
+// threading infrastructure selection
+#ifndef JULIA_ENABLE_PARTR
+#define JULIA_ENABLE_FORKJOIN_TI        1
+
+// select an implementation of stack switching.
+// currently only COPY_STACKS is recommended.
+#ifndef COPY_STACKS
+#define COPY_STACKS
+#endif
+#endif // !JULIA_ENABLE_PARTR
 
 
 // sanitizer defaults ---------------------------------------------------------

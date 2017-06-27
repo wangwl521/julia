@@ -192,6 +192,7 @@ function wait(t::Task)
     end
 end
 
+if !JULIA_PARTR
 """
     fetch(t::Task)
 
@@ -202,6 +203,7 @@ function fetch(t::Task)
     wait(t)
     task_result(t)
 end
+end # !JULIA_PARTR
 
 
 ## lexically-scoped waiting for multiple items
