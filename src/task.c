@@ -752,7 +752,7 @@ void jl_init_tasks(void) JL_GC_DISABLED
                                 jl_any_type,
                                 jl_any_type,
                                 jl_any_type),
-                        0, 1, 12);
+                        0, 1, 14);
     jl_svecset(jl_task_type->types, 7, (jl_value_t*)jl_method_instance_type);
     jl_svecset(jl_task_type->types, 9, (jl_value_t*)jl_method_instance_type);
     jl_svecset(jl_task_type->types, 10, (jl_value_t*)jl_task_type);
@@ -762,7 +762,7 @@ void jl_init_tasks(void) JL_GC_DISABLED
         jl_new_datatype(jl_symbol("Condition"), NULL, jl_any_type, jl_emptysvec,
                         jl_perm_symsvec(3, "head", "lock_owner", "lock_count"),
                         jl_svec(3, jl_task_type, jl_int64_type, jl_int32_type),
-                        0, 1, 3);
+                        0, 1, 2);
 #endif /* JULIA_ENABLE_PARTR */
 
     done_sym = jl_symbol("done");
@@ -794,8 +794,10 @@ void jl_init_root_task(void *stack, size_t ssize)
     ptls->current_task->mfunc = NULL;
     ptls->current_task->rargs = jl_nothing;
     ptls->current_task->mredfunc = NULL;
+    ptls->current_task->cq.head = NULL;
+    JL_MUTEX_INIT(&ptls->current_task->cq.lock);
     ptls->current_task->next = NULL;
-    ptls->current_task->parent = NULL;
+    ptls->current_task->parent = ptls->current_task;
     ptls->current_task->red_result = jl_nothing;
     ptls->current_task->current_tid = ptls->tid;
     ptls->current_task->arr = NULL;
