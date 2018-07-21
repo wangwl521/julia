@@ -210,6 +210,8 @@ JL_DLLEXPORT void jl_typeassert(jl_value_t *x, jl_value_t *t)
         jl_type_error("typeassert", t, x);
 }
 
+// exceptions -----------------------------------------------------------------
+
 JL_DLLEXPORT void jl_enter_handler(jl_handler_t *eh)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
@@ -239,6 +241,13 @@ JL_DLLEXPORT void jl_pop_handler(int n)
     while (--n > 0)
         eh = eh->prev;
     jl_eh_restore_state(eh);
+}
+
+JL_DLLEXPORT void jl_eh_pop_exc(jl_handler_t *eh)
+{
+    // FIXME: exstack not stack allocated... so we must manage the memory
+    // explicitly
+    //ptls->exstack = eh->exstack;
 }
 
 JL_DLLEXPORT jl_value_t *jl_apply_with_saved_exception_state(jl_value_t **args, uint32_t nargs, int drop_exceptions)
@@ -273,6 +282,52 @@ JL_DLLEXPORT jl_value_t *jl_apply_with_saved_exception_state(jl_value_t **args, 
     }
     JL_GC_POP();
     return v;
+}
+
+jl_exc_stack_t *jl_init_exc_stack(size_t reserved_size)
+{
+    jl_exc_stack_t *stack = (jl_exc_stack_t*)malloc(sizeof(jl_exc_stack_t) +
+                                                    sizeof(uintptr_t)*reserved_size);
+    stack->top = 0;
+    stack->reserved_size = reserved_size;
+    return stack;
+}
+
+void jl_push_exc_stack(jl_exc_stack_t **stack, jl_value_t *exception,
+                       uintptr_t *bt_data, size_t bt_size, int allow_alloc)
+{
+    jl_exc_stack_t *s = *stack;
+    size_t required_size = s->top + bt_size + 2;
+    if (s->reserved_size < required_size) {
+        jl_exc_stack_t *new_s = NULL;
+        if (allow_alloc) {
+            new_s = (jl_exc_stack_t*)realloc(s, sizeof(jl_exc_stack_t) +
+                                                sizeof(uintptr_t)*required_size);
+        }
+        if (new_s == NULL) {
+            // Not a lot we can do here.
+            // TODO: print a warning, or print the stack?
+            return;
+        }
+        s = new_s;
+        s->reserved_size = required_size;
+        *stack = new_s;
+    }
+    memcpy(jl_excstk_raw(s) + s->top, bt_data, sizeof(uintptr_t)*bt_size);
+    s->top += bt_size + 2;
+    jl_excstk_raw(s)[s->top-2] = bt_size;
+    jl_excstk_raw(s)[s->top-1] = (uintptr_t)exception;
+}
+
+void jl_pop_exc_stack(jl_exc_stack_t *stack, size_t n)
+{
+    size_t top = stack->top;
+    while (n != 0 && top > 0) {
+        top = jl_exc_stack_next(stack, top);
+        --n;
+    }
+    stack->top = top;
+    assert(n == 0);
 }
 
 // misc -----------------------------------------------------------------------
