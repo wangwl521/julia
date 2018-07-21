@@ -1602,11 +1602,12 @@ typedef struct _jl_task_t {
     jl_value_t *backtrace;
     jl_value_t *logstate;
     jl_function_t *start;
+
+// hidden fields:
     jl_jmp_buf ctx;
     size_t bufsz;
     void *stkbuf;
 
-// hidden fields:
     size_t ssize;
     size_t started:1;
 
