@@ -297,6 +297,8 @@ JL_DLLEXPORT void jl_atexit_hook(int exitcode)
     loop->stop_flag = 0;
     while (uv_run(loop, UV_RUN_DEFAULT)) { }
 
+    // TODO: Destroy threads
+
     jl_destroy_timing();
 #ifdef ENABLE_TIMINGS
     jl_print_timings();

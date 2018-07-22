@@ -647,6 +647,7 @@ SECT_INTERP static jl_value_t *eval_body(jl_array_t *stmts, interpreter_state *s
             }
             else if (head == pop_exc_sym) {
                 // FIXME
+                // jl_eh_pop_exc(&__eh);
             }
             else if (head == const_sym) {
                 jl_sym_t *sym = (jl_sym_t*)jl_exprarg(stmt, 0);

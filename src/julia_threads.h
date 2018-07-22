@@ -80,12 +80,12 @@ typedef struct {
     jl_gc_mark_data_t *data_stack;
 } jl_gc_mark_cache_t;
 
+typedef struct _jl_exc_stack_t jl_exc_stack_t;
 // This includes all the thread local states we care about for a thread.
 #define JL_MAX_BT_SIZE 80000
 struct _jl_tls_states_t {
     struct _jl_gcframe_t *pgcstack;
     size_t world_age;
-    struct _jl_value_t *exception_in_transit;
     volatile size_t *safepoint;
     // Whether it is safe to execute GC at the same time.
 #define JL_GC_STATE_WAITING 1
@@ -107,9 +107,14 @@ struct _jl_tls_states_t {
     jl_jmp_buf base_ctx; // base context of stack
     jl_jmp_buf *safe_restore;
     int16_t tid;
+    // Exception and backtrace in transit (possibly from signal handler) to
+    // catch site. Will be moved to exc_stack at first opportunity.
+    struct _jl_value_t *exception_in_transit;
     size_t bt_size;
     // JL_MAX_BT_SIZE + 1 elements long
-    uintptr_t *bt_data;
+    uintptr_t *bt_data; // TODO: Rename to bt_in_transit?
+    // Stack of exceptions being handled by task.
+    jl_exc_stack_t *exc_stack;
     // Atomically set by the sender, reset by the handler.
     volatile sig_atomic_t signal_request;
     // Allow the sigint to be raised asynchronously

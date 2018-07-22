@@ -219,6 +219,7 @@ JL_DLLEXPORT void jl_enter_handler(jl_handler_t *eh)
     // Must have no safepoint
     eh->prev = current_task->eh;
     eh->gcstack = ptls->pgcstack;
+    eh->exc_stack_top = ptls->exc_stack->top;
 #ifdef JULIA_ENABLE_THREADING
     eh->gc_state = ptls->gc_state;
     eh->locks_len = current_task->locks.len;
@@ -230,6 +231,49 @@ JL_DLLEXPORT void jl_enter_handler(jl_handler_t *eh)
 #ifdef ENABLE_TIMINGS
     eh->timing_stack = current_task->timing_stack;
 #endif
+}
+
+JL_DLLEXPORT void jl_eh_restore_state(jl_handler_t *eh)
+{
+    jl_ptls_t ptls = jl_get_ptls_states();
+    jl_task_t *current_task = ptls->current_task;
+    // `eh` may not be `ptls->current_task->eh`. See `jl_pop_handler`
+    // This function should **NOT** have any safepoint before the ones at the
+    // end.
+    sig_atomic_t old_defer_signal = ptls->defer_signal;
+    int8_t old_gc_state = ptls->gc_state;
+    current_task->eh = eh->prev;
+    ptls->pgcstack = eh->gcstack;
+    // If there was an exception, push onto the stack
+    /*
+    if (ptls->exception_in_transit != jl_nothing) {
+        jl_push_exc_stack(&ptls->exc_stack, ptls->exception_in_transit,
+                          ptls->bt_data, ptls->bt_size, 1);
+        // FIXME: Uncomment the following to remove the exception.  This will
+        // likely break many things until old uses of exception_in_transit are
+        // removed.
+        // ptls->exception_in_transit = jl_nothing;
+        // ptls->bt_size = 0;
+    }
+    */
+#ifdef JULIA_ENABLE_THREADING
+    arraylist_t *locks = &current_task->locks;
+    if (locks->len > eh->locks_len) {
+        for (size_t i = locks->len;i > eh->locks_len;i--)
+            jl_mutex_unlock_nogc((jl_mutex_t*)locks->items[i - 1]);
+        locks->len = eh->locks_len;
+    }
+#endif
+    ptls->world_age = eh->world_age;
+    ptls->defer_signal = eh->defer_signal;
+    ptls->gc_state = eh->gc_state;
+    ptls->finalizers_inhibited = eh->finalizers_inhibited;
+    if (old_gc_state && !eh->gc_state) {
+        jl_gc_safepoint_(ptls);
+    }
+    if (old_defer_signal && !eh->defer_signal) {
+        jl_sigint_safepoint(ptls);
+    }
 }
 
 JL_DLLEXPORT void jl_pop_handler(int n)
@@ -245,9 +289,9 @@ JL_DLLEXPORT void jl_pop_handler(int n)
 
 JL_DLLEXPORT void jl_eh_pop_exc(jl_handler_t *eh)
 {
-    // FIXME: exstack not stack allocated... so we must manage the memory
-    // explicitly
-    //ptls->exstack = eh->exstack;
+    jl_ptls_t ptls = jl_get_ptls_states();
+    assert(ptls->exc_stack->top >= eh->exc_stack_top);
+    ptls->exc_stack->top = eh->exc_stack_top;
 }
 
 JL_DLLEXPORT jl_value_t *jl_apply_with_saved_exception_state(jl_value_t **args, uint32_t nargs, int drop_exceptions)
