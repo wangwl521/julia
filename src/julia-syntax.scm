@@ -3385,7 +3385,7 @@ f(x) = yt(x)
                               ;; is `(return x)`, `(break x)`, or a call to rethrow.
         (handler-goto-fixups '())  ;; `goto`s that might need `leave` exprs added
         (handler-level 0)     ;; exception handler nesting depth
-        (catch-level 0)) ;; label stack for entry points of current try blocks
+        (handler-token-stack '())) ;; stack of tokens identifying current error handlers
     (define (emit c)
       (set! code (cons c code)))
     (define (make-label)
@@ -3415,8 +3415,8 @@ f(x) = yt(x)
                         x))
                (tmp (if (valid-ir-return? x) #f (make-ssavalue))))
           (if tmp (emit `(= ,tmp ,x)))
-          (if (> catch-level 0)
-             (emit `(pop_exc ,catch-level)))
+          (if (pair? handler-token-stack)
+              (emit `(pop_exc ,(car handler-token-stack)))) ;; FIXME!!
           (emit `(return ,(or tmp x)))))
       (if x
           (if (> handler-level 0)
@@ -3705,15 +3705,16 @@ f(x) = yt(x)
             ;; exception handlers are lowered using
             ;; (enter L) - push handler with catch block at label L
             ;; (leave n) - pop N exception handlers
-            ;; (pop_exc) - pop exception stack back to state of associated enter
+            ;; (pop_exc tok) - pop exception stack back to state of associated enter
             ((trycatch tryfinally)
-             (let ((catch (make-label))
+             (let ((handler-token (make-ssavalue))
+                   (catch (make-label))
                    (endl  (make-label))
                    (last-finally-handler finally-handler)
                    (finally           (if (eq? (car e) 'tryfinally) (new-mutable-var) #f))
                    (finally-exception (if (eq? (car e) 'tryfinally) (new-mutable-var) #f))
                    (my-finally-handler #f))
-               (emit `(enter ,catch))
+               (emit `(= ,handler-token (enter ,catch)))
                (set! handler-level (+ handler-level 1))
                (if finally (begin (set! my-finally-handler (list finally endl '() handler-level))
                                   (set! finally-handler my-finally-handler)
@@ -3728,7 +3729,7 @@ f(x) = yt(x)
                      (begin (emit '(leave 1))
                             (emit `(goto ,endl))))
                  (set! handler-level (- handler-level 1))
-                 (set! catch-level (+ catch-level 1))
+                 (set! handler-token-stack (cons handler-token handler-token-stack))
                  (mark-label catch)
                  (emit `(leave 1))
                  (if finally
@@ -3738,7 +3739,7 @@ f(x) = yt(x)
                                                  #f))
                      (let ((v2 (compile (caddr e) break-labels value tail)))
                        (if val (emit-assignment val v2))
-                       (if (not tail) (emit `(pop_exc 1)))))
+                       (if (not tail) (emit `(pop_exc ,handler-token)))))
                  (if endl (mark-label endl))
                  (if finally
                      (begin (set! finally-handler last-finally-handler)
@@ -3760,7 +3761,7 @@ f(x) = yt(x)
                                              (emit ac))))
                                     (if skip (mark-label skip))
                                     (loop (cdr actions)))))))
-                 (set! catch-level (- catch-level 1))
+                 (set! handler-token-stack (cdr handler-token-stack))
                  val)))
 
             ((newvar)
