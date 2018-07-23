@@ -1199,6 +1199,7 @@ JL_DLLEXPORT int jl_get_size(jl_value_t *val, size_t *pnt);
 #define jl_box_long(x)   jl_box_int64(x)
 #define jl_box_ulong(x)  jl_box_uint64(x)
 #define jl_unbox_long(x) jl_unbox_int64(x)
+#define jl_unbox_ulong(x) jl_unbox_uint64(x)
 #define jl_is_long(x)    jl_is_int64(x)
 #define jl_long_type     jl_int64_type
 #define jl_ulong_type    jl_uint64_type
@@ -1206,6 +1207,7 @@ JL_DLLEXPORT int jl_get_size(jl_value_t *val, size_t *pnt);
 #define jl_box_long(x)   jl_box_int32(x)
 #define jl_box_ulong(x)  jl_box_uint32(x)
 #define jl_unbox_long(x) jl_unbox_int32(x)
+#define jl_unbox_ulong(x) jl_unbox_uint32(x)
 #define jl_is_long(x)    jl_is_int32(x)
 #define jl_long_type     jl_int32_type
 #define jl_ulong_type    jl_uint32_type
@@ -1616,6 +1618,8 @@ typedef struct _jl_task_t {
     jl_handler_t *eh;
     // saved gc stack top for context switches
     jl_gcframe_t *gcstack;
+    // saved exception stack (NULL if empty)
+    jl_exc_stack_t *exc_stack;
     // current module, or NULL if this task has not set one
     jl_module_t *current_module;
     // current world age

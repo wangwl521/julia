@@ -6341,6 +6341,7 @@ static std::unique_ptr<Module> emit_function(
                     }
                 }
                 assert(found);
+                (void)found;
             }
             else {
                 terminator->removeFromParent();

@@ -615,6 +615,9 @@ SECT_INTERP static jl_value_t *eval_body(jl_array_t *stmts, interpreter_state *s
                     }
                     catch_ip += 1;
                 }
+                // store just the previous state of the exception stack as the
+                // result of the enter, as this is all we need for pop_exc.
+                s->locals[jl_source_nslots(s->src) + s->ip] = jl_box_ulong(__eh.exc_stack_top);
                 if (!jl_setjmp(__eh.eh_ctx,1)) {
                     return eval_body(stmts, s, s->ip + 1, toplevel);
                 }
@@ -646,8 +649,12 @@ SECT_INTERP static jl_value_t *eval_body(jl_array_t *stmts, interpreter_state *s
                 jl_longjmp(eh->eh_ctx, 1);
             }
             else if (head == pop_exc_sym) {
-                // FIXME
-                // jl_eh_pop_exc(&__eh);
+                // equivalent to `jl_eh_pop_exc(&__eh)` *if* `__eh` still referred
+                // to the associated exception handler, which it may not.
+                size_t prev_stack_top = jl_unbox_ulong(eval_value(jl_exprarg(stmt, 0), s));
+                jl_ptls_t ptls = jl_get_ptls_states();
+                assert(ptls->exc_stack->top >= prev_stack_top);
+                ptls->exc_stack->top = prev_stack_top;
             }
             else if (head == const_sym) {
                 jl_sym_t *sym = (jl_sym_t*)jl_exprarg(stmt, 0);

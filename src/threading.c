@@ -284,6 +284,7 @@ static void ti_initthread(int16_t tid)
     memset(bt_data, 0, sizeof(uintptr_t) * (JL_MAX_BT_SIZE + 1));
     ptls->bt_data = (uintptr_t*)bt_data;
     ptls->exc_stack = jl_init_exc_stack(JL_MAX_BT_SIZE);
+    ptls->exception_in_transit2 = NULL;
     jl_init_thread_heap(ptls);
     jl_install_thread_signal_handler(ptls);
 

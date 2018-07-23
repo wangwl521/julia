@@ -245,17 +245,12 @@ JL_DLLEXPORT void jl_eh_restore_state(jl_handler_t *eh)
     current_task->eh = eh->prev;
     ptls->pgcstack = eh->gcstack;
     // If there was an exception, push onto the stack
-    /*
-    if (ptls->exception_in_transit != jl_nothing) {
-        jl_push_exc_stack(&ptls->exc_stack, ptls->exception_in_transit,
-                          ptls->bt_data, ptls->bt_size, 1);
-        // FIXME: Uncomment the following to remove the exception.  This will
-        // likely break many things until old uses of exception_in_transit are
-        // removed.
-        // ptls->exception_in_transit = jl_nothing;
-        // ptls->bt_size = 0;
+    if (ptls->exception_in_transit2) {
+        jl_push_exc_stack(&ptls->exc_stack, ptls->exception_in_transit2,
+                          ptls->bt_data, ptls->bt_size);
+        ptls->exception_in_transit2 = NULL;
+        // ptls->bt_size = 0; // FIXME
     }
-    */
 #ifdef JULIA_ENABLE_THREADING
     arraylist_t *locks = &current_task->locks;
     if (locks->len > eh->locks_len) {
@@ -338,19 +333,16 @@ jl_exc_stack_t *jl_init_exc_stack(size_t reserved_size)
 }
 
 void jl_push_exc_stack(jl_exc_stack_t **stack, jl_value_t *exception,
-                       uintptr_t *bt_data, size_t bt_size, int allow_alloc)
+                       uintptr_t *bt_data, size_t bt_size)
 {
     jl_exc_stack_t *s = *stack;
     size_t required_size = s->top + bt_size + 2;
     if (s->reserved_size < required_size) {
-        jl_exc_stack_t *new_s = NULL;
-        if (allow_alloc) {
-            new_s = (jl_exc_stack_t*)realloc(s, sizeof(jl_exc_stack_t) +
-                                                sizeof(uintptr_t)*required_size);
-        }
+        jl_exc_stack_t *new_s = (jl_exc_stack_t*)realloc(s, sizeof(jl_exc_stack_t) +
+                                                         sizeof(uintptr_t)*required_size);
         if (new_s == NULL) {
-            // Not a lot we can do here.
-            // TODO: print a warning, or print the stack?
+            jl_printf(JL_STDERR, "Could not allocate exception stack space. Lost exception:\n");
+            jl_static_show(JL_STDERR, exception);
             return;
         }
         s = new_s;

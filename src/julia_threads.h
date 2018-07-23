@@ -136,6 +136,7 @@ struct _jl_tls_states_t {
     int finalizers_inhibited;
     arraylist_t finalizers;
     jl_gc_mark_cache_t gc_cache;
+    struct _jl_value_t *exception_in_transit2; // FIXME
 };
 
 // Update codegen version in `ccall.cpp` after changing either `pause` or `wake`

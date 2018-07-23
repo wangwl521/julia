@@ -682,7 +682,7 @@ typedef struct _jl_exc_stack_t {
 // Stack managemenet
 jl_exc_stack_t *jl_init_exc_stack(size_t reserved_size);
 void jl_push_exc_stack(jl_exc_stack_t **stack, jl_value_t *exception,
-                       uintptr_t *bt_data, size_t bt_size, int allow_alloc);
+                       uintptr_t *bt_data, size_t bt_size);
 void jl_pop_exc_stack(jl_exc_stack_t *stack, size_t n);
 
 // timers
