@@ -292,11 +292,11 @@ JL_DLLEXPORT void jl_pop_handler(int n)
     jl_eh_restore_state(eh);
 }
 
-JL_DLLEXPORT void jl_eh_pop_exc(jl_handler_t *eh)
+JL_DLLEXPORT void jl_restore_exc_stack(size_t prev_top)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
-    assert(ptls->exc_stack->top >= eh->exc_stack_top);
-    ptls->exc_stack->top = eh->exc_stack_top;
+    assert(ptls->exc_stack->top >= prev_top);
+    ptls->exc_stack->top = prev_top;
 }
 
 JL_DLLEXPORT jl_value_t *jl_apply_with_saved_exception_state(jl_value_t **args, uint32_t nargs, int drop_exceptions)

@@ -1646,7 +1646,7 @@ JL_DLLEXPORT void JL_NORETURN jl_no_exc_handler(jl_value_t *e);
 JL_DLLEXPORT void jl_enter_handler(jl_handler_t *eh);
 JL_DLLEXPORT void jl_eh_restore_state(jl_handler_t *eh);
 JL_DLLEXPORT void jl_pop_handler(int n);
-JL_DLLEXPORT void jl_eh_pop_exc(jl_handler_t *eh);
+JL_DLLEXPORT void jl_restore_exc_stack(size_t prev_top);
 
 #if defined(_OS_WINDOWS_)
 #if defined(_COMPILER_MINGW_)
@@ -1692,7 +1692,7 @@ extern int had_exception;
 
 #define JL_CATCH                                                \
     else                                                        \
-        for (i__ca=1, jl_eh_restore_state(&__eh); i__ca; i__ca=0, jl_eh_pop_exc(&__eh))
+        for (i__ca=1, jl_eh_restore_state(&__eh); i__ca; i__ca=0, jl_restore_exc_stack(__eh.exc_stack_top))
 
 #endif
 

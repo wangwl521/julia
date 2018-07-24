@@ -648,12 +648,10 @@ SECT_INTERP static jl_value_t *eval_body(jl_array_t *stmts, interpreter_state *s
                 jl_longjmp(eh->eh_ctx, 1);
             }
             else if (head == pop_exc_sym) {
-                // similar to `jl_eh_pop_exc(&__eh)`, but `__eh->exc_stack_top`
-                // may be already overwritten at this point.
+                // note that `__eh->exc_stack_top` may be already overwritten
+                // at this point.
                 size_t prev_stack_top = jl_unbox_ulong(eval_value(jl_exprarg(stmt, 0), s));
-                jl_ptls_t ptls = jl_get_ptls_states();
-                assert(ptls->exc_stack->top >= prev_stack_top);
-                ptls->exc_stack->top = prev_stack_top;
+                jl_restore_exc_stack(prev_stack_top);
             }
             else if (head == const_sym) {
                 jl_sym_t *sym = (jl_sym_t*)jl_exprarg(stmt, 0);
