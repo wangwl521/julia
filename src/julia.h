@@ -30,7 +30,6 @@
 #  endif
 #else
 #  define jl_jmp_buf jmp_buf
-#  include <malloc.h> //for _resetstkoflw
 #  define MAX_ALIGN 8
 #endif
 
@@ -1691,16 +1690,9 @@ extern int had_exception;
     if (!jl_setjmp(__eh.eh_ctx,0))                                \
         for (i__tr=1; i__tr; i__tr=0, jl_eh_restore_state(&__eh))
 
-#ifdef _OS_WINDOWS_
-#define JL_CATCH                                                \
-    else                                                        \
-        for (i__ca=1, jl_eh_restore_state(&__eh); i__ca; i__ca=0, jl_eh_pop_exc(&__eh)) \
-            if (((jl_get_ptls_states()->exception_in_transit==jl_stackovf_exception) && _resetstkoflw()) || 1)
-#else
 #define JL_CATCH                                                \
     else                                                        \
         for (i__ca=1, jl_eh_restore_state(&__eh); i__ca; i__ca=0, jl_eh_pop_exc(&__eh))
-#endif
 
 #endif
 

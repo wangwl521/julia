@@ -233,6 +233,11 @@ JL_DLLEXPORT void jl_enter_handler(jl_handler_t *eh)
 #endif
 }
 
+// Restore thread local state to saved state in error handler `eh`.
+// This is executed in two circumstances:
+// * We leave a try block through normal control flow
+// * An exception causes a nonlocal jump to the catch block. In this case
+//   there's additional cleanup required, eg pushing the exception stack.
 JL_DLLEXPORT void jl_eh_restore_state(jl_handler_t *eh)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
@@ -244,8 +249,13 @@ JL_DLLEXPORT void jl_eh_restore_state(jl_handler_t *eh)
     int8_t old_gc_state = ptls->gc_state;
     current_task->eh = eh->prev;
     ptls->pgcstack = eh->gcstack;
-    // If there was an exception, push onto the stack
     if (ptls->exception_in_transit2) {
+        // Exception in transit must be captured here before any julia runtime
+        // function can throw a new one.
+#ifdef _OS_WINDOWS_
+        if (ptls->exception_in_transit2 == jl_stackovf_exception)
+            _resetstkoflw();
+#endif
         jl_push_exc_stack(&ptls->exc_stack, ptls->exception_in_transit2,
                           ptls->bt_data, ptls->bt_size);
         ptls->exception_in_transit2 = NULL;

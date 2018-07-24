@@ -615,42 +615,41 @@ SECT_INTERP static jl_value_t *eval_body(jl_array_t *stmts, interpreter_state *s
                     }
                     catch_ip += 1;
                 }
-                // store just the previous state of the exception stack as the
-                // result of the enter, as this is all we need for pop_exc.
+                // store previous top of exception stack for use by pop_exc.
                 s->locals[jl_source_nslots(s->src) + s->ip] = jl_box_ulong(__eh.exc_stack_top);
                 if (!jl_setjmp(__eh.eh_ctx,1)) {
-                    return eval_body(stmts, s, s->ip + 1, toplevel);
-                }
-                else if (s->continue_at) {
-                    s->ip = s->continue_at;
-                    s->continue_at = 0;
-                    continue;
+                    eval_body(stmts, s, s->ip + 1, toplevel); // returns via continue_at
                 }
                 else {
-#ifdef _OS_WINDOWS_
-                    if (jl_get_ptls_states()->exception_in_transit == jl_stackovf_exception)
-                        _resetstkoflw();
-#endif
-                    s->ip = jl_unbox_long(jl_exprarg(stmt, 0)) - 1;
+                    if (s->continue_at) {
+                        // execution resumes here after a `leave`
+                        s->ip = s->continue_at;
+                        s->continue_at = 0;
+                    }
+                    else {
+                        // an exception occurred: go to catch block
+                        s->ip = jl_unbox_long(jl_exprarg(stmt, 0)) - 1;
+                    }
                     continue;
                 }
             }
             else if (head == leave_sym) {
                 int hand_n_leave = jl_unbox_long(jl_exprarg(stmt,0));
                 assert(hand_n_leave > 0);
-                // equivalent to jl_pop_handler(hand_n_leave) :
+                // equivalent to jl_pop_handler(hand_n_leave), but retaining eh for longjmp:
                 jl_ptls_t ptls = jl_get_ptls_states();
                 jl_handler_t *eh = ptls->current_task->eh;
                 while (--hand_n_leave > 0)
                     eh = eh->prev;
                 jl_eh_restore_state(eh);
-                // pop jmp_bufs from stack
                 s->continue_at = s->ip + 1;
+                // leave happens during normal control flow, but we must
+                // longjmp to pop the eval_body call for each enter.
                 jl_longjmp(eh->eh_ctx, 1);
             }
             else if (head == pop_exc_sym) {
-                // equivalent to `jl_eh_pop_exc(&__eh)` *if* `__eh` still referred
-                // to the associated exception handler, which it may not.
+                // similar to `jl_eh_pop_exc(&__eh)`, but `__eh->exc_stack_top`
+                // may be already overwritten at this point.
                 size_t prev_stack_top = jl_unbox_ulong(eval_value(jl_exprarg(stmt, 0), s));
                 jl_ptls_t ptls = jl_get_ptls_states();
                 assert(ptls->exc_stack->top >= prev_stack_top);
