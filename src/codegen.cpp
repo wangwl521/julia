@@ -288,6 +288,7 @@ static Function *jlmethod_func;
 static Function *jlgenericfunction_func;
 static Function *jlenter_func;
 static Function *jlleave_func;
+static Function *jl_restore_exc_stack_func;
 static Function *jlegal_func;
 static Function *jl_alloc_obj_func;
 static Function *jl_newbits_func;
@@ -3761,7 +3762,9 @@ static void emit_stmtpos(jl_codectx_t &ctx, jl_value_t *expr, int ssaval_result)
                            ConstantInt::get(T_int32, jl_unbox_long(args[0])));
     }
     else if (head == pop_exc_sym) {
-        // FIXME
+        jl_cgval_t exc_stack_top = emit_expr(ctx, jl_exprarg(expr, 0));
+        assert(exc_stack_top.V && exc_stack_top.V->getType() == T_size);
+        ctx.builder.CreateCall(prepare_call(jl_restore_exc_stack_func), exc_stack_top.V);
         return;
     }
     else {
@@ -6172,6 +6175,13 @@ static std::unique_ptr<Module> emit_function(
 
             assert(jl_is_long(args[0]));
             int lname = jl_unbox_long(args[0]);
+            // Save exception stack depth at enter for use in pop_exc
+            Value *exc_stack_top = ctx.builder.CreateLoad(emit_pexc_stack_top(ctx),
+                                                          "exc_stack_top");
+            assert(!ctx.ssavalue_assigned.at(cursor));
+            ctx.SAvalues.at(cursor) = jl_cgval_t(exc_stack_top, NULL, false,
+                                                 (jl_value_t*)jl_ulong_type, NULL);
+            ctx.ssavalue_assigned.at(cursor) = true;
             CallInst *sj = ctx.builder.CreateCall(prepare_call(except_enter_func));
             // We need to mark this on the call site as well. See issue #6757
             sj->setCanReturnTwice();
@@ -7110,6 +7120,12 @@ static void init_julia_llvm_env(Module *m)
                          Function::ExternalLinkage,
                          "jl_pop_handler", m);
     add_named_global(jlleave_func, &jl_pop_handler);
+
+    jl_restore_exc_stack_func =
+        Function::Create(FunctionType::get(T_void, T_size, false),
+                         Function::ExternalLinkage,
+                         "jl_restore_exc_stack", m);
+    add_named_global(jl_restore_exc_stack_func, &jl_restore_exc_stack);
 
     std::vector<Type *> args_2vals_callee_rooted(0);
     args_2vals_callee_rooted.push_back(PointerType::get(T_jlvalue, AddressSpace::CalleeRooted));

@@ -2576,6 +2576,17 @@ static Value *emit_exc_in_transit(jl_codectx_t &ctx)
     return ctx.builder.CreateInBoundsGEP(pexc_in_transit, ArrayRef<Value*>(offset), "jl_exception_in_transit");
 }
 
+static Value *emit_pexc_stack_top(jl_codectx_t &ctx)
+{
+    // Load the pointer ptls->exc_stack
+    // Types here are a bit of a lie, but we didn't declare jl_tls_states_t to LLVM.
+    Value *ptls_val = emit_bitcast(ctx, ctx.ptlsStates, PointerType::get(T_psize,0));
+    Constant *offset = ConstantInt::getSigned(T_int32,
+        offsetof(jl_tls_states_t, exc_stack) / sizeof(size_t**));
+    Value *ppexc_stack_top = ctx.builder.CreateInBoundsGEP(ptls_val, offset);
+    return ctx.builder.CreateLoad(ppexc_stack_top, true/*isvolatile*/);
+}
+
 static void emit_signal_fence(jl_codectx_t &ctx)
 {
 #if defined(_CPU_ARM_) || defined(_CPU_AARCH64_)

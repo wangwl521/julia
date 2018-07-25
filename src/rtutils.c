@@ -351,7 +351,7 @@ void jl_push_exc_stack(jl_exc_stack_t **stack, jl_value_t *exception,
         jl_exc_stack_t *new_s = (jl_exc_stack_t*)realloc(s, sizeof(jl_exc_stack_t) +
                                                          sizeof(uintptr_t)*required_size);
         if (new_s == NULL) {
-            jl_printf(JL_STDERR, "Could not allocate exception stack space. Lost exception:\n");
+            jl_printf(JL_STDERR, "Could not reallocate exception stack space. Lost exception:\n");
             jl_static_show(JL_STDERR, exception);
             return;
         }
