@@ -442,6 +442,7 @@ typedef struct _jl_module_t {
     JL_DATA_TYPE
     jl_sym_t *name;
     struct _jl_module_t *parent;
+    // hidden fields:
     htable_t bindings;
     arraylist_t usings;  // modules with all bindings potentially imported
     uint64_t build_id;

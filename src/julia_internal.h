@@ -673,12 +673,12 @@ typedef struct _jl_exc_stack_t {
     // uintptr_t data[]; // Access with jl_excstk_raw
 #define jl_excstk_raw(stack) ((uintptr_t*)((char*)(stack) + sizeof(jl_exc_stack_t)))
 } jl_exc_stack_t;
-// Exception stack iteration (start at itr=stack->top, stop at itr=0)
-#define jl_exc_stack_next(stack, itr)      ((itr) - jl_excstk_raw(stack)[(itr)-2] - 2)
 // Stack access
 #define jl_exc_stack_exception(stack, itr) ((jl_value_t*)jl_excstk_raw(stack)[(itr)-1])
 #define jl_exc_stack_bt_size(stack, itr)   ((size_t)jl_excstk_raw(stack)[(itr)-2])
 #define jl_exc_stack_bt_data(stack, itr)   (jl_excstk_raw(stack) + itr - 2 - jl_excstk_raw(stack)[(itr)-2])
+// Exception stack iteration (start at itr=stack->top, stop at itr=0)
+#define jl_exc_stack_next(stack, itr)      ((itr) - 2 - jl_exc_stack_bt_size(stack,itr))
 // Stack managemenet
 jl_exc_stack_t *jl_init_exc_stack(size_t reserved_size);
 void jl_push_exc_stack(jl_exc_stack_t **stack, jl_value_t *exception,

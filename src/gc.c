@@ -1486,6 +1486,17 @@ STATIC_INLINE int gc_mark_queue_obj(jl_gc_mark_cache_t *gc_cache, gc_mark_sp_t *
     return (int)nptr;
 }
 
+// Queue an exception stack to be scanned.
+void gc_mark_queue_scan_exc_stack(jl_gc_mark_cache_t *gc_cache, gc_mark_sp_t *sp,
+                                  jl_exc_stack_t* exc_stack)
+{
+    if (exc_stack->top == 0)
+        return;
+    gc_mark_exc_stack_t data = {exc_stack, exc_stack->top, 0};
+    gc_mark_stack_push(gc_cache, sp, gc_mark_label_addrs[GC_MARK_L_excstack],
+                       &data, sizeof(data), 1);
+}
+
 // Check if `nptr` is tagged for `old + refyoung`,
 // Push the object to the remset and update the `nptr` counter if necessary.
 STATIC_INLINE void gc_mark_push_remset(jl_ptls_t ptls, jl_value_t *obj, uintptr_t nptr) JL_NOTSAFEPOINT
@@ -1664,6 +1675,8 @@ STATIC_INLINE int gc_mark_scan_obj32(jl_ptls_t ptls, gc_mark_sp_t *sp, gc_mark_o
             goto obj32;                         \
         case GC_MARK_L_stack:                   \
             goto stack;                         \
+        case GC_MARK_L_excstack:                \
+            goto excstack;                      \
         case GC_MARK_L_module_binding:          \
             goto module_binding;                \
         default:                                \
@@ -1712,9 +1725,11 @@ STATIC_INLINE int gc_mark_scan_obj32(jl_ptls_t ptls, gc_mark_sp_t *sp, gc_mark_o
 // (OTOH, the spill will likely make use of the stack engine which is otherwise idle so
 //  the performance impact is minimum as long as it's not in the hottest path)
 
-// There are three external entry points to the loop, corresponding to label
-// `marked_obj`, `scan_only` and `finlist` (see the corresponding functions
-// `gc_mark_queue_obj`, `gc_mark_queue_scan_obj` and `gc_mark_queue_finlist` above).
+// There are four external entry points to the loop, corresponding to labels `marked_obj`,
+// `scan_only`, `finlist` and `excstack` (see the corresponding functions
+// `gc_mark_queue_obj`, `gc_mark_queue_scan_obj`, `gc_mark_queue_finlist` and
+// `gc_mark_queue_scan_exc_stack` above).
+//
 // The scanning of the object starts with `goto mark`, which updates the metadata and scans
 // the object whose information is stored in `new_obj`, `tag` and `bits`.
 // The branches in `mark` will dispatch the object to one of the scan "loop"s to be scanned
@@ -1749,6 +1764,7 @@ JL_EXTENSION NOINLINE void gc_mark_loop(jl_ptls_t ptls, gc_mark_sp_t sp)
         gc_mark_label_addrs[GC_MARK_L_obj16] = gc_mark_laddr(obj16);
         gc_mark_label_addrs[GC_MARK_L_obj32] = gc_mark_laddr(obj32);
         gc_mark_label_addrs[GC_MARK_L_stack] = gc_mark_laddr(stack);
+        gc_mark_label_addrs[GC_MARK_L_excstack] = gc_mark_laddr(excstack);
         gc_mark_label_addrs[GC_MARK_L_module_binding] = gc_mark_laddr(module_binding);
         return;
     }
@@ -1899,6 +1915,46 @@ stack: {
             }
             goto pop;
         }
+    }
+
+excstack: {
+        // Scan an exception stack (rooted in task or thread local state)
+        gc_mark_exc_stack_t *stackitr = gc_pop_markdata(&sp, gc_mark_exc_stack_t);
+        jl_exc_stack_t *exc_stack = stackitr->s;
+        size_t itr = stackitr->itr;
+        size_t i = stackitr->i;
+        while (itr > 0) {
+            size_t bt_size = jl_exc_stack_bt_size(exc_stack, itr);
+            uint64_t *bt_data = jl_exc_stack_bt_data(exc_stack, itr);
+            while (i+2 < bt_size) {
+                if (bt_data[i] != (uintptr_t)-1) {
+                    i++;
+                    continue;
+                }
+                // found an interpreter frame to mark
+                new_obj = (jl_value_t*)bt_data[i+1];
+                uintptr_t nptr = 0;
+                if (gc_try_setmark(new_obj, &nptr, &tag, &bits)) {
+                    stackitr->i = i + 3;
+                    stackitr->itr = itr;
+                    gc_repush_markdata(&sp, gc_mark_exc_stack_t);
+                    goto mark;
+                }
+                i += 3;
+            }
+            // mark the exception
+            new_obj = jl_exc_stack_exception(exc_stack, itr);
+            itr = jl_exc_stack_next(exc_stack, itr);
+            i = 0;
+            uintptr_t nptr = 0;
+            if (gc_try_setmark(new_obj, &nptr, &tag, &bits)) {
+                stackitr->i = i;
+                stackitr->itr = itr;
+                gc_repush_markdata(&sp, gc_mark_exc_stack_t);
+                goto mark;
+            }
+        }
+        goto pop;
     }
 
 module_binding: {
@@ -2158,13 +2214,21 @@ mark: {
                 gc_mark_stack_push(&ptls->gc_cache, &sp, gc_mark_laddr(stack),
                                    &stackdata, sizeof(stackdata), 1);
             }
+            if (ta->exc_stack) {
+                assert(ta->exc_stack->top > 0);
+                gc_mark_exc_stack_t stackdata = {ta->exc_stack, ta->exc_stack->top, 0};
+                gc_mark_stack_push(&ptls->gc_cache, &sp, gc_mark_laddr(excstack),
+                                   &stackdata, sizeof(stackdata), 1);
+            }
             const jl_datatype_layout_t *layout = jl_task_type->layout;
             assert(layout->fielddesc_type == 0);
             size_t nfields = layout->nfields;
             assert(nfields > 0);
             obj8_begin = (jl_fielddesc8_t*)jl_dt_layout_fields(layout);
             obj8_end = obj8_begin + nfields;
-            gc_mark_obj8_t markdata = {new_obj, obj8_begin, obj8_end, (9 << 2) | 1 | bits};
+            // assume tasks always reference young objects: set lowest bit
+            uintptr_t nptr = (9 << 2) | 1 | bits;
+            gc_mark_obj8_t markdata = {new_obj, obj8_begin, obj8_end, nptr};
             gc_mark_stack_push(&ptls->gc_cache, &sp, gc_mark_laddr(obj8),
                                &markdata, sizeof(markdata), 0);
             obj8 = (gc_mark_obj8_t*)sp.data;
@@ -2253,6 +2317,7 @@ static void jl_gc_queue_thread_local(jl_gc_mark_cache_t *gc_cache, gc_mark_sp_t 
     gc_mark_queue_obj(gc_cache, sp, ptls2->current_task);
     gc_mark_queue_obj(gc_cache, sp, ptls2->root_task);
     gc_mark_queue_obj(gc_cache, sp, ptls2->exception_in_transit);
+    gc_mark_queue_scan_exc_stack(gc_cache, sp, ptls2->exc_stack);
 }
 
 // mark the initial root set
@@ -2430,18 +2495,6 @@ static void jl_gc_queue_remset(jl_gc_mark_cache_t *gc_cache, gc_mark_sp_t *sp, j
     ptls2->heap.rem_bindings.len = n_bnd_refyoung;
 }
 
-static void jl_gc_queue_bt_buf(jl_gc_mark_cache_t *gc_cache, gc_mark_sp_t *sp, jl_ptls_t ptls2)
-{
-    size_t n = 0;
-    while (n+2 < ptls2->bt_size) {
-        if (ptls2->bt_data[n] == (uintptr_t)-1) {
-            gc_mark_queue_obj(gc_cache, sp, (jl_value_t*)ptls2->bt_data[n+1]);
-            n += 2;
-        }
-        n++;
-    }
-}
-
 // Only one thread should be running in this function
 static int _jl_gc_collect(jl_ptls_t ptls, int full)
 {
@@ -2462,8 +2515,6 @@ static int _jl_gc_collect(jl_ptls_t ptls, int full)
         jl_gc_queue_remset(gc_cache, &sp, ptls2);
         // 2.2. mark every thread local root
         jl_gc_queue_thread_local(gc_cache, &sp, ptls2);
-        // 2.3. mark any managed objects in the backtrace buffer
-        jl_gc_queue_bt_buf(gc_cache, &sp, ptls2);
     }
 
     // 3. walk roots

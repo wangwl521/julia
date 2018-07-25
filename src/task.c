@@ -327,8 +327,13 @@ static void ctx_switch(jl_ptls_t ptls, jl_task_t **pt)
         lastt->world_age = ptls->world_age;
         if (ptls->exc_stack->top != 0) {
             lastt->exc_stack = ptls->exc_stack;
-            ptls->exc_stack = t->exc_stack ? t->exc_stack :
-                                             jl_init_exc_stack(JL_MAX_BT_SIZE);
+            if (t->exc_stack) {
+                ptls->exc_stack = t->exc_stack;
+                t->exc_stack = NULL;
+            }
+            else {
+                ptls->exc_stack = jl_init_exc_stack(JL_MAX_BT_SIZE);
+            }
         }
         ptls->pgcstack = t->gcstack;
         ptls->world_age = t->world_age;
