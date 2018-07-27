@@ -1420,6 +1420,10 @@ JL_DLLEXPORT void JL_NORETURN jl_bounds_error_tuple_int(jl_value_t **v,
 JL_DLLEXPORT void JL_NORETURN jl_bounds_error_unboxed_int(void *v, jl_value_t *vt, size_t i);
 JL_DLLEXPORT void JL_NORETURN jl_bounds_error_ints(jl_value_t *v, size_t *idxs, size_t nidxs);
 JL_DLLEXPORT void JL_NORETURN jl_eof_error(void);
+// Return the exception currently being handled, or nothing if we are not
+// inside the scope of a JL_CATCH.  Note that catch scope is determined
+// dynamically so this works in functions called from a catch block.
+JL_DLLEXPORT jl_value_t *jl_current_exception(void);
 JL_DLLEXPORT jl_value_t *jl_exception_occurred(void);
 JL_DLLEXPORT void jl_exception_clear(void) JL_NOTSAFEPOINT;
 
@@ -1897,8 +1901,6 @@ typedef struct {
 #define jl_current_module (jl_get_ptls_states()->current_module)
 #define jl_current_task (jl_get_ptls_states()->current_task)
 #define jl_root_task (jl_get_ptls_states()->root_task)
-#define jl_exception_in_transit (jl_get_ptls_states()->exception_in_transit)
-
 
 // codegen interface ----------------------------------------------------------
 

@@ -236,7 +236,7 @@ static void JL_NORETURN finish_task(jl_task_t *t, jl_value_t *resultval JL_MAYBE
             jl_apply(args, 2);
         }
         JL_CATCH {
-            jl_no_exc_handler(jl_exception_in_transit);
+            jl_no_exc_handler(jl_current_exception());
         }
     }
     gc_debug_critical_error();
@@ -271,7 +271,7 @@ static void NOINLINE JL_NORETURN JL_USED_FUNC start_task(void)
             res = jl_apply(&t->start, 1);
         }
         JL_CATCH {
-            res = ptls->exception_in_transit;
+            res = jl_current_exception();
             t->exception = res;
             jl_gc_wb(t, res);
         }

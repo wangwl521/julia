@@ -508,10 +508,11 @@ JL_DLLEXPORT void jl_gdblookup(uintptr_t ip)
 
 JL_DLLEXPORT void jlbacktrace(void)
 {
-    jl_ptls_t ptls = jl_get_ptls_states();
-    size_t i, n = ptls->bt_size; // ptls->bt_size > 400 ? 400 : ptls->bt_size;
-    for (i = 0; i < n; i++)
-        jl_gdblookup(ptls->bt_data[i] - 1);
+    jl_exc_stack_t *s = jl_get_ptls_states()->exc_stack;
+    size_t bt_size = jl_exc_stack_bt_size(s, s->top);
+    uintptr_t *bt_data = jl_exc_stack_bt_data(s, s->top);
+    for (size_t i = 0; i < bt_size; i++)
+        jl_gdblookup(bt_data[i] - 1);
 }
 
 #ifdef __cplusplus

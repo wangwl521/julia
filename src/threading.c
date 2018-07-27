@@ -323,7 +323,7 @@ static jl_value_t *ti_run_fun(jl_callptr_t fptr, jl_method_instance_t *mfunc,
             ptls->safe_restore = &buf;
             jl_printf(JL_STDERR, "\nError thrown in threaded loop on thread %d: ",
                       (int)ptls->tid);
-            jl_static_show(JL_STDERR, ptls->exception_in_transit);
+            jl_static_show(JL_STDERR, jl_current_exception());
         }
         ptls->safe_restore = old_buf;
         JL_UNLOCK_NOGC(&lock);

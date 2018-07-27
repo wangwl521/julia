@@ -119,7 +119,7 @@ void jl_call_tracer(tracer_cb callback, jl_value_t *tracee)
     JL_CATCH {
         ptls->in_pure_callback = last_in;
         jl_printf(JL_STDERR, "WARNING: tracer callback function threw an error:\n");
-        jl_static_show(JL_STDERR, ptls->exception_in_transit);
+        jl_static_show(JL_STDERR, jl_current_exception());
         jl_printf(JL_STDERR, "\n");
         jlbacktrace();
     }

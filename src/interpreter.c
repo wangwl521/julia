@@ -508,7 +508,7 @@ SECT_INTERP static jl_value_t *eval_value(jl_value_t *e, interpreter_state *s)
         return jl_copy_ast(eval_value(args[0], s));
     }
     else if (head == exc_sym) {
-        return jl_get_ptls_states()->exception_in_transit;
+        return jl_current_exception();
     }
     else if (head == boundscheck_sym) {
         return jl_true;

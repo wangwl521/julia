@@ -13,6 +13,7 @@
 #include "julia.h"
 #include "options.h"
 #include "julia_assert.h"
+#include "julia_internal.h"
 
 #ifdef __cplusplus
 #include <cfenv>
@@ -101,6 +102,12 @@ JL_DLLEXPORT jl_value_t *jl_eval_string(const char *str)
         r = NULL;
     }
     return r;
+}
+
+JL_DLLEXPORT jl_value_t *jl_current_exception(void)
+{
+    jl_exc_stack_t *s = jl_get_ptls_states()->exc_stack;
+    return s->top != 0 ? jl_exc_stack_exception(s, s->top) : jl_nothing;
 }
 
 JL_DLLEXPORT jl_value_t *jl_exception_occurred(void)

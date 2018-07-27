@@ -117,7 +117,7 @@ static void run_finalizer(jl_ptls_t ptls, jl_value_t *o, jl_value_t *ff)
     }
     JL_CATCH {
         jl_printf(JL_STDERR, "error in running finalizer: ");
-        jl_static_show(JL_STDERR, ptls->exception_in_transit);
+        jl_static_show(JL_STDERR, jl_current_exception());
         jl_printf(JL_STDERR, "\n");
     }
 }
@@ -196,27 +196,11 @@ static void jl_gc_run_finalizers_in_list(jl_ptls_t ptls, arraylist_t *list)
     jl_value_t **items = (jl_value_t**)list->items;
     size_t len = list->len;
     JL_UNLOCK_NOGC(&finalizers_lock);
-    // from jl_apply_with_saved_exception_state; to hoist state saving out of the loop
-    jl_value_t *exc = ptls->exception_in_transit;
-    jl_array_t *bt = NULL;
-    jl_array_t *bt2 = NULL;
-    JL_GC_PUSH3(&exc, &bt, &bt2);
-    if (ptls->bt_size > 0) {
-        jl_get_backtrace(&bt, &bt2);
-        ptls->bt_size = 0;
-    }
     // run finalizers in reverse order they were added, so lower-level finalizers run last
     for (size_t i = len-4; i >= 2; i -= 2)
         run_finalizer(ptls, items[i], items[i + 1]);
     // first entries were moved last to make room for GC frame metadata
     run_finalizer(ptls, items[len-2], items[len-1]);
-    ptls->exception_in_transit = exc;
-    if (bt != NULL) {
-        // This is sufficient because bt2 roots the managed values
-        memcpy(ptls->bt_data, bt->data, jl_array_len(bt) * sizeof(void*));
-        ptls->bt_size = jl_array_len(bt);
-    }
-    JL_GC_POP();
     // matches the jl_gc_push_arraylist above
     JL_GC_POP();
 }
