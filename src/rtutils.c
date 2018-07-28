@@ -249,17 +249,17 @@ JL_DLLEXPORT void jl_eh_restore_state(jl_handler_t *eh)
     int8_t old_gc_state = ptls->gc_state;
     current_task->eh = eh->prev;
     ptls->pgcstack = eh->gcstack;
-    if (ptls->exception_in_transit2) {
+    if (ptls->exception_in_transit) {
         // Exception in transit must be captured here before any julia runtime
         // function can throw a new one.
 #ifdef _OS_WINDOWS_
-        if (ptls->exception_in_transit2 == jl_stackovf_exception)
+        if (ptls->exception_in_transit == jl_stackovf_exception)
             _resetstkoflw();
 #endif
-        jl_push_exc_stack(&ptls->exc_stack, ptls->exception_in_transit2,
+        jl_push_exc_stack(&ptls->exc_stack, ptls->exception_in_transit,
                           ptls->bt_data, ptls->bt_size);
-        ptls->exception_in_transit2 = NULL;
-        // ptls->bt_size = 0; // FIXME
+        ptls->exception_in_transit = NULL;
+        ptls->bt_size = 0;
     }
 #ifdef JULIA_ENABLE_THREADING
     arraylist_t *locks = &current_task->locks;

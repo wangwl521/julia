@@ -112,15 +112,12 @@ JL_DLLEXPORT jl_value_t *jl_current_exception(void)
 
 JL_DLLEXPORT jl_value_t *jl_exception_occurred(void)
 {
-    jl_ptls_t ptls = jl_get_ptls_states();
-    return ptls->exception_in_transit == jl_nothing ? NULL :
-        ptls->exception_in_transit;
+    return jl_get_ptls_states()->previous_exception;
 }
 
 JL_DLLEXPORT void jl_exception_clear(void)
 {
-    jl_ptls_t ptls = jl_get_ptls_states();
-    ptls->exception_in_transit = jl_nothing;
+    jl_get_ptls_states()->previous_exception = NULL;
 }
 
 // get the name of a type as a string

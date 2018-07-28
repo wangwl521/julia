@@ -287,6 +287,7 @@ static Function *jlgetfield_func;
 static Function *jlmethod_func;
 static Function *jlgenericfunction_func;
 static Function *jlenter_func;
+static Function *jlcurrent_exception_func;
 static Function *jlleave_func;
 static Function *jl_restore_exc_stack_func;
 static Function *jlegal_func;
@@ -3918,8 +3919,7 @@ static jl_cgval_t emit_expr(jl_codectx_t &ctx, jl_value_t *expr, ssize_t ssaval)
                 bnd = jl_get_binding_for_method_def(mod, (jl_sym_t*)mn);
             }
             JL_CATCH {
-                jl_ptls_t ptls = jl_get_ptls_states();
-                jl_value_t *e = ptls->exception_in_transit;
+                jl_value_t *e = jl_current_exception();
                 // errors. boo. root it somehow :(
                 bnd = jl_get_binding_wr(ctx.module, (jl_sym_t*)jl_gensym(), 1);
                 bnd->value = e;
@@ -3988,9 +3988,9 @@ static jl_cgval_t emit_expr(jl_codectx_t &ctx, jl_value_t *expr, ssize_t ssaval)
         Value *val = emit_jlcall(ctx, jlnew_func, typ, &argv[1], nargs - 1);
         return mark_julia_type(ctx, val, true, ty);
     }
-    else if (head == exc_sym) { // *ptls->exception_in_transit
+    else if (head == exc_sym) {
         return mark_julia_type(ctx,
-                ctx.builder.CreateLoad(emit_exc_in_transit(ctx), /*isvolatile*/true),
+                ctx.builder.CreateCall(prepare_call(jlcurrent_exception_func)),
                 true, jl_any_type);
     }
     else if (head == copyast_sym) {
@@ -7080,6 +7080,12 @@ static void init_julia_llvm_env(Module *m)
                          Function::ExternalLinkage,
                          "jl_enter_handler", m);
     add_named_global(jlenter_func, &jl_enter_handler);
+
+    jlcurrent_exception_func =
+        Function::Create(FunctionType::get(T_prjlvalue, false),
+                         Function::ExternalLinkage,
+                         "jl_current_exception", m);
+    add_named_global(jlcurrent_exception_func, &jl_current_exception);
 
 #ifdef _OS_WINDOWS_
 #if defined(_CPU_X86_64_)

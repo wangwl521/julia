@@ -2300,7 +2300,8 @@ static void jl_gc_queue_thread_local(jl_gc_mark_cache_t *gc_cache, gc_mark_sp_t 
         gc_mark_queue_obj(gc_cache, sp, ptls2->current_module);
     gc_mark_queue_obj(gc_cache, sp, ptls2->current_task);
     gc_mark_queue_obj(gc_cache, sp, ptls2->root_task);
-    gc_mark_queue_obj(gc_cache, sp, ptls2->exception_in_transit);
+    if (ptls2->previous_exception)
+        gc_mark_queue_obj(gc_cache, sp, ptls2->previous_exception);
     gc_mark_queue_scan_exc_stack(gc_cache, sp, ptls2->exc_stack);
 }
 

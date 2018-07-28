@@ -108,8 +108,9 @@ struct _jl_tls_states_t {
     jl_jmp_buf base_ctx; // base context of stack
     jl_jmp_buf *safe_restore;
     int16_t tid;
-    // Exception and backtrace in transit (possibly from signal handler) to
-    // catch site. Will be moved to exc_stack at first opportunity.
+    // Exception and backtrace in transit, to persist during
+    // jl_eh_restore_state. These are not rooted, as no gc safe point should
+    // intervene between throwing via longjmp and exception handler cleanup.
     struct _jl_value_t *exception_in_transit;
     size_t bt_size;
     // JL_MAX_BT_SIZE + 1 elements long
@@ -137,7 +138,9 @@ struct _jl_tls_states_t {
     int finalizers_inhibited;
     arraylist_t finalizers;
     jl_gc_mark_cache_t gc_cache;
-    struct _jl_value_t *exception_in_transit2; // FIXME
+    // Saved exception for previous external API call or NULL if cleared.
+    // Access via jl_exception_occurred().
+    struct _jl_value_t *previous_exception;
 };
 
 // Update codegen version in `ccall.cpp` after changing either `pause` or `wake`
