@@ -243,12 +243,6 @@ static void JL_NORETURN finish_task(jl_task_t *t, jl_value_t *resultval JL_MAYBE
     abort();
 }
 
-static void record_backtrace(void) JL_NOTSAFEPOINT
-{
-    jl_ptls_t ptls = jl_get_ptls_states();
-    ptls->bt_size = rec_backtrace(ptls->bt_data, JL_MAX_BT_SIZE);
-}
-
 static void NOINLINE JL_NORETURN JL_USED_FUNC start_task(void)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
@@ -257,7 +251,11 @@ static void NOINLINE JL_NORETURN JL_USED_FUNC start_task(void)
     jl_value_t *res;
     t->started = 1;
     if (t->exception != jl_nothing) {
-        record_backtrace();
+        assert(!ptls->exception_in_transit);
+        size_t bt_size = rec_backtrace(ptls->bt_data, JL_MAX_BT_SIZE);
+        t->exc_stack = jl_init_exc_stack(bt_size);
+        // FIXME!!!  exc_stack GC memory management. What to do?
+        jl_push_exc_stack(t->exc_stack, t->exception, ptls->bt_data, bt_size);
         res = t->exception;
     }
     else {
@@ -586,14 +584,14 @@ JL_DLLEXPORT void jl_throw(jl_value_t *e)
     jl_ptls_t ptls = jl_get_ptls_states();
     assert(e != NULL);
     if (!ptls->safe_restore)
-        record_backtrace();
+        ptls->bt_size = rec_backtrace(ptls->bt_data, JL_MAX_BT_SIZE);
     throw_internal(e);
 }
 
 JL_DLLEXPORT void jl_rethrow(void)
 {
-    // rethrow with current exc_stack state (or exception_in_transit for the
-    // special case of jl_throw_in_ctx)
+    // rethrow with current exc_stack state (or ptls->exception_in_transit
+    // for the special case of jl_throw_in_ctx)
     throw_internal(NULL);
 }
 

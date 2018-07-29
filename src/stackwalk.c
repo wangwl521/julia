@@ -167,8 +167,14 @@ void decode_backtrace(uintptr_t *bt_data, size_t bt_size,
 
 JL_DLLEXPORT void jl_get_backtrace(jl_array_t **btout, jl_array_t **bt2out)
 {
-    jl_ptls_t ptls = jl_get_ptls_states();
-    decode_backtrace(ptls->bt_data, ptls->bt_size, btout, bt2out);
+    jl_exc_stack_t *s = jl_get_ptls_states()->exc_stack;
+    uintptr_t *bt_data = NULL;
+    size_t bt_size = 0;
+    if (s->top) {
+        bt_data = jl_exc_stack_bt_data(s, s->top);
+        bt_size = jl_exc_stack_bt_size(s, s->top);
+    }
+    decode_backtrace(bt_data, bt_size, btout, bt2out);
 }
 
 // Return data from the exception stack as an array of Any, starting with the

@@ -1902,7 +1902,7 @@ stack: {
     }
 
 excstack: {
-        // Scan an exception stack (rooted in task or thread local state)
+        // Scan an exception stack
         gc_mark_exc_stack_t *stackitr = gc_pop_markdata(&sp, gc_mark_exc_stack_t);
         jl_exc_stack_t *exc_stack = stackitr->s;
         size_t itr = stackitr->itr;
