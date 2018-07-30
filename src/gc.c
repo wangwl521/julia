@@ -1470,10 +1470,21 @@ STATIC_INLINE int gc_mark_queue_obj(jl_gc_mark_cache_t *gc_cache, gc_mark_sp_t *
     return (int)nptr;
 }
 
-// Queue an exception stack to be scanned.
+// Mark and queue an exception stack to be scanned.
 void gc_mark_queue_scan_exc_stack(jl_gc_mark_cache_t *gc_cache, gc_mark_sp_t *sp,
                                   jl_exc_stack_t* exc_stack)
 {
+    uintptr_t nptr = 0;
+    uintptr_t tag = 0;
+    uint8_t bits = 0;
+    // FIXME: How does this differ from gc_setmark_buf_ ?
+    // What's the difference between a buffer and object?
+    if (!gc_try_setmark((jl_value_t*)exc_stack, &nptr, &tag, &bits)) {
+        tag = jl_astaggedvalue((jl_value_t*)exc_stack)->header;
+        jl_safe_printf("gc_mark_queue_scan_exc_stack skipped queue header=%zx\n", tag);
+        return;
+    }
+    jl_safe_printf("gc_mark_queue_scan_exc_stack tag=%zx bits=%02x\n", tag, bits);
     if (exc_stack->top == 0)
         return;
     gc_mark_exc_stack_t data = {exc_stack, exc_stack->top, 0};
@@ -2199,7 +2210,9 @@ mark: {
                                    &stackdata, sizeof(stackdata), 1);
             }
             if (ta->exc_stack) {
-                assert(ta->exc_stack->top > 0);
+                assert(ta->exc_stack->top > 0); // FIXME?
+                gc_setmark_buf_(ptls, ta->exc_stack, bits, sizeof(jl_exc_stack_t) +
+                                sizeof(uintptr_t)*ta->exc_stack->reserved_size);
                 gc_mark_exc_stack_t stackdata = {ta->exc_stack, ta->exc_stack->top, 0};
                 gc_mark_stack_push(&ptls->gc_cache, &sp, gc_mark_laddr(excstack),
                                    &stackdata, sizeof(stackdata), 1);

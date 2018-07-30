@@ -108,10 +108,9 @@ struct _jl_tls_states_t {
     jl_jmp_buf base_ctx; // base context of stack
     jl_jmp_buf *safe_restore;
     int16_t tid;
-    // Temp storage for exception in transit to catch point. Not rooted, as no
-    // gc safe point can intervene between jl_throw and jl_eh_restore_state.
-    struct _jl_value_t *exception_in_transit;
-    // Temporary backtrace buffer (normally to accompany exception_in_transit)
+    // Temp storage for exception thrown in signal handler. Not rooted.
+    struct _jl_value_t *sig_exception;
+    // Temporary backtrace buffer.
     uintptr_t *bt_data; // JL_MAX_BT_SIZE + 1 elements long
     size_t bt_size;    // Size for backtrace in transit in bt_data
     // Stack of exceptions being handled by task.
@@ -127,6 +126,9 @@ struct _jl_tls_states_t {
     // These are only used on unix now
     pthread_t system_id;
     void *signal_stack;
+#endif
+#ifdef _OS_WINDOWS_
+    int needs_resetstkoflw;
 #endif
     // execution of certain certain impure
     // statements is prohibited from certain

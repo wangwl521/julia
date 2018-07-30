@@ -120,16 +120,16 @@ void jl_throw_in_ctx(jl_value_t *excpt, CONTEXT *ctxThread, int bt)
         assert(excpt != NULL);
         ptls->bt_size = bt ? rec_backtrace_ctx(ptls->bt_data, JL_MAX_BT_SIZE,
                                                ctxThread) : 0;
-        ptls->exception_in_transit = excpt;
+        ptls->sig_exception = excpt;
     }
 #if defined(_CPU_X86_64_)
     *(DWORD64*)Rsp = 0;
     ctxThread->Rsp = Rsp;
-    ctxThread->Rip = (DWORD64)&jl_rethrow;
+    ctxThread->Rip = (DWORD64)&jl_sig_throw;
 #elif defined(_CPU_X86_)
     *(DWORD32*)Esp = 0;
     ctxThread->Esp = Esp;
-    ctxThread->Eip = (DWORD)&jl_rethrow;
+    ctxThread->Eip = (DWORD)&jl_sig_throw;
 #endif
 }
 
@@ -205,6 +205,7 @@ static LONG WINAPI _exception_handler(struct _EXCEPTION_POINTERS *ExceptionInfo,
                     ExceptionInfo->ContextRecord,in_ctx);
                 return EXCEPTION_CONTINUE_EXECUTION;
             case EXCEPTION_STACK_OVERFLOW:
+                ptls->needs_resetstkoflw = 1;
                 jl_throw_in_ctx(jl_stackovf_exception,
                     ExceptionInfo->ContextRecord,in_ctx&&pSetThreadStackGuarantee);
                 return EXCEPTION_CONTINUE_EXECUTION;

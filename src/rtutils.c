@@ -241,6 +241,12 @@ JL_DLLEXPORT void jl_enter_handler(jl_handler_t *eh)
 JL_DLLEXPORT void jl_eh_restore_state(jl_handler_t *eh)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
+#ifdef _OS_WINDOWS_
+    if (ptls->needs_resetstkoflw) {
+        _resetstkoflw();
+        ptls->needs_resetstkoflw = 0;
+    }
+#endif
     jl_task_t *current_task = ptls->current_task;
     // `eh` may be not equal to `ptls->current_task->eh`. See `jl_pop_handler`
     // This function should **NOT** have any safepoint before the ones at the
@@ -249,18 +255,6 @@ JL_DLLEXPORT void jl_eh_restore_state(jl_handler_t *eh)
     int8_t old_gc_state = ptls->gc_state;
     current_task->eh = eh->prev;
     ptls->pgcstack = eh->gcstack;
-    if (ptls->exception_in_transit) {
-        // Exception in transit must be captured here before any julia runtime
-        // function can throw a new one.
-#ifdef _OS_WINDOWS_
-        if (ptls->exception_in_transit == jl_stackovf_exception)
-            _resetstkoflw();
-#endif
-        jl_push_exc_stack(&ptls->exc_stack, ptls->exception_in_transit,
-                          ptls->bt_data, ptls->bt_size);
-        ptls->exception_in_transit = NULL;
-        ptls->bt_size = 0;
-    }
 #ifdef JULIA_ENABLE_THREADING
     arraylist_t *locks = &current_task->locks;
     if (locks->len > eh->locks_len) {
@@ -317,32 +311,32 @@ JL_DLLEXPORT jl_value_t *jl_apply_with_saved_exception_state(jl_value_t **args, 
     return v;
 }
 
-jl_exc_stack_t *jl_init_exc_stack(size_t reserved_size)
+void jl_copy_exc_stack(jl_exc_stack_t *dest, jl_exc_stack_t *src)
 {
-    jl_exc_stack_t *stack = (jl_exc_stack_t*)malloc(sizeof(jl_exc_stack_t) +
-                                                    sizeof(uintptr_t)*reserved_size);
-    stack->top = 0;
-    stack->reserved_size = reserved_size;
-    return stack;
+    assert(dest->reserve_size >= src->top);
+    memcpy(jl_excstk_raw(dest), jl_excstk_raw(src), sizeof(uintptr_t)*src->top);
+    dest->top = src->top;
+}
+
+void jl_reserve_exc_stack(jl_exc_stack_t **stack, size_t reserved_size)
+{
+    jl_exc_stack_t *s = *stack;
+    if (s && s->reserved_size >= reserved_size)
+        return;
+    size_t bufsz = sizeof(jl_exc_stack_t) + sizeof(uintptr_t)*reserved_size;
+    jl_exc_stack_t *new_s = (jl_exc_stack_t*)jl_gc_alloc_buf(jl_get_ptls_states(), bufsz);
+    new_s->top = 0;
+    if (s)
+        jl_copy_exc_stack(new_s, s);
+    new_s->reserved_size = reserved_size;
+    *stack = new_s;
 }
 
 void jl_push_exc_stack(jl_exc_stack_t **stack, jl_value_t *exception,
                        uintptr_t *bt_data, size_t bt_size)
 {
     jl_exc_stack_t *s = *stack;
-    size_t required_size = s->top + bt_size + 2;
-    if (s->reserved_size < required_size) {
-        jl_exc_stack_t *new_s = (jl_exc_stack_t*)realloc(s, sizeof(jl_exc_stack_t) +
-                                                         sizeof(uintptr_t)*required_size);
-        if (new_s == NULL) {
-            jl_printf(JL_STDERR, "Could not reallocate exception stack space. Lost exception:\n");
-            jl_static_show(JL_STDERR, exception);
-            return;
-        }
-        s = new_s;
-        s->reserved_size = required_size;
-        *stack = new_s;
-    }
+    jl_reserve_exc_stack(stack, (s ? s->top : 0) + bt_size + 2);
     memcpy(jl_excstk_raw(s) + s->top, bt_data, sizeof(uintptr_t)*bt_size);
     s->top += bt_size + 2;
     jl_excstk_raw(s)[s->top-2] = bt_size;
