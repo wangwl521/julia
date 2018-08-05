@@ -242,7 +242,7 @@ JL_DLLEXPORT void jl_eh_restore_state(jl_handler_t *eh)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
     jl_task_t *current_task = ptls->current_task;
-    // `eh` may not be `ptls->current_task->eh`. See `jl_pop_handler`
+    // `eh` may be not equal to `ptls->current_task->eh`. See `jl_pop_handler`
     // This function should **NOT** have any safepoint before the ones at the
     // end.
     sig_atomic_t old_defer_signal = ptls->defer_signal;
