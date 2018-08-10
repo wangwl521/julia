@@ -1474,17 +1474,15 @@ STATIC_INLINE int gc_mark_queue_obj(jl_gc_mark_cache_t *gc_cache, gc_mark_sp_t *
 void gc_mark_queue_scan_exc_stack(jl_gc_mark_cache_t *gc_cache, gc_mark_sp_t *sp,
                                   jl_exc_stack_t* exc_stack)
 {
-    uintptr_t nptr = 0;
-    uintptr_t tag = 0;
-    uint8_t bits = 0;
-    // FIXME: How does this differ from gc_setmark_buf_ ?
-    // What's the difference between a buffer and object?
-    if (!gc_try_setmark((jl_value_t*)exc_stack, &nptr, &tag, &bits)) {
-        tag = jl_astaggedvalue((jl_value_t*)exc_stack)->header;
-        jl_safe_printf("gc_mark_queue_scan_exc_stack skipped queue header=%zx\n", tag);
+    if (gc_marked(jl_astaggedvalue(exc_stack)->header)) {
         return;
     }
-    jl_safe_printf("gc_mark_queue_scan_exc_stack tag=%zx bits=%02x\n", tag, bits);
+    // TODO: Should we be testing `if (gc_marked(jl_astaggedvalue(exc_stack)->header))`?
+    // FIXME: How does gc_try_setmark differ from gc_setmark_buf_ ?
+    // What's the difference between a buffer and object?
+    // if (!gc_try_setmark((jl_value_t*)exc_stack, &nptr, &tag, &bits)) {
+    gc_setmark_buf_(jl_get_ptls_states(), exc_stack, 0,
+                    sizeof(exc_stack) + sizeof(uintptr_t)*exc_stack->reserved_size);
     if (exc_stack->top == 0)
         return;
     gc_mark_exc_stack_t data = {exc_stack, exc_stack->top, 0};
