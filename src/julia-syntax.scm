@@ -3378,14 +3378,14 @@ f(x) = yt(x)
         (arg-map #f)          ;; map arguments to new names if they are assigned
         (label-counter 0)     ;; counter for generating label addresses
         (label-map (table))   ;; maps label names to generated addresses
-        (label-level (table)) ;; exception handler level of each label
+        (label-nesting (table)) ;; exception handler and catch block nesting of each label
         (finally-handler #f)  ;; `(var label map level)` where `map` is a list of `(tag . action)`.
                               ;; to exit the current finally block, set `var` to integer `tag`,
                               ;; jump to `label`, and put `(tag . action)` in the map, where `action`
                               ;; is `(return x)`, `(break x)`, or a call to rethrow.
         (handler-goto-fixups '())  ;; `goto`s that might need `leave` exprs added
         (handler-level 0)     ;; exception handler nesting depth
-        (handler-token-stack '())) ;; stack of tokens identifying current error handlers
+        (catch-token-stack '())) ;; tokens identifying handler enter for current catch blocks
     (define (emit c)
       (set! code (cons c code)))
     (define (make-label)
@@ -3408,6 +3408,16 @@ f(x) = yt(x)
             (begin (emit `(leave ,(+ 1 (- handler-level (cadddr finally-handler)))))
                    (emit `(goto ,(cadr finally-handler)))))
         tag))
+    (define (pop-exc-expr src-tokens dest-tokens)
+      (if (eq? src-tokens dest-tokens)
+          #f
+          (let ((restore-token (let loop ((s src-tokens))
+                                 (if (not (pair? s))
+                                     (error "Attempt to jump into catch block"))
+                                 (if (eq? (cdr s) dest-tokens)
+                                     (car s)
+                                     (loop (cdr s))))))
+            `(pop_exc ,restore-token))))
     (define (emit-return x)
       (define (actually-return x)
         (let* ((x   (if rett
@@ -3415,8 +3425,8 @@ f(x) = yt(x)
                         x))
                (tmp (if (valid-ir-return? x) #f (make-ssavalue))))
           (if tmp (emit `(= ,tmp ,x)))
-          (if (pair? handler-token-stack)
-              (emit `(pop_exc ,(car handler-token-stack)))) ;; FIXME!!
+          (let ((pexc (pop-exc-expr catch-token-stack '())))
+            (if pexc (emit pexc)))
           (emit `(return ,(or tmp x)))))
       (if x
           (if (> handler-level 0)
@@ -3431,10 +3441,13 @@ f(x) = yt(x)
                 (or tmp x))
               (actually-return x))))
     (define (emit-break labl)
-      (let ((lvl (caddr labl)))
+      (let ((lvl (caddr labl))
+            (dest-tokens (cadddr labl)))
         (if (and finally-handler (> (cadddr finally-handler) lvl))
             (leave-finally-block `(break ,labl))
             (begin
+              (let ((pexc (pop-exc-expr catch-token-stack dest-tokens)))
+                (if pexc (emit pexc)))
               (if (> handler-level lvl)
                   (emit `(leave ,(- handler-level lvl))))
               (emit `(goto ,(cadr labl)))))))
@@ -3669,7 +3682,7 @@ f(x) = yt(x)
             ((break-block)
              (let ((endl (make-label)))
                (compile (caddr e)
-                        (cons (list (cadr e) endl handler-level)
+                        (cons (list (cadr e) endl handler-level catch-token-stack)
                               break-labels)
                         #f #f)
                (mark-label endl))
@@ -3681,9 +3694,9 @@ f(x) = yt(x)
                    (emit-break labl))))
             ((label symboliclabel)
              (if (eq? (car e) 'symboliclabel)
-                 (if (has? label-level (cadr e))
+                 (if (has? label-nesting (cadr e))
                      (error (string "label \"" (cadr e) "\" defined multiple times"))
-                     (put! label-level (cadr e) handler-level)))
+                     (put! label-nesting (cadr e) (list handler-level catch-token-stack))))
              (let ((m (get label-map (cadr e) #f)))
                (if m
                    (emit `(label ,m))
@@ -3696,10 +3709,10 @@ f(x) = yt(x)
                     (m (or m (let ((l (make-label)))
                                (put! label-map (cadr e) l)
                                l))))
-               (emit `(null))  ;; save space for `leave` that might be needed
+               (emit `(null))  ;; save space for `leave` and `pop_exc` that might be needed
                (emit `(goto ,m))
                (set! handler-goto-fixups
-                     (cons (list code handler-level (cadr e)) handler-goto-fixups))
+                     (cons (list code handler-level catch-token-stack (cadr e)) handler-goto-fixups))
                #f))
 
             ;; exception handlers are lowered using
@@ -3729,7 +3742,7 @@ f(x) = yt(x)
                      (begin (emit '(leave 1))
                             (emit `(goto ,endl))))
                  (set! handler-level (- handler-level 1))
-                 (set! handler-token-stack (cons handler-token handler-token-stack))
+                 (set! catch-token-stack (cons handler-token catch-token-stack))
                  (mark-label catch)
                  (emit `(leave 1))
                  (if finally
@@ -3761,7 +3774,7 @@ f(x) = yt(x)
                                              (emit ac))))
                                     (if skip (mark-label skip))
                                     (loop (cdr actions)))))))
-                 (set! handler-token-stack (cdr handler-token-stack))
+                 (set! catch-token-stack (cdr catch-token-stack))
                  val)))
 
             ((newvar)
@@ -3899,8 +3912,11 @@ f(x) = yt(x)
     (for-each (lambda (x)
                 (let ((point (car x))
                       (hl    (cadr x))
-                      (lab   (caddr x)))
-                  (let ((target-level (get label-level lab #f)))
+                      (src-tokens (caddr x))
+                      (lab   (cadddr x)))
+                  (let* ((target-nesting (get label-nesting lab #f))
+                         (target-level (car target-nesting))
+                         (target-tokens (cadr target-nesting)))
                     (cond ((not target-level)
                            (error (string "label \"" lab "\" referenced but not defined")))
                           ((> target-level hl)
@@ -3908,7 +3924,9 @@ f(x) = yt(x)
                           ((= target-level hl)
                            (set-cdr! point (cddr point))) ;; remove empty slot
                           (else
-                           (set-car! (cdr point) `(leave ,(- hl target-level))))))))
+                           (set-car! (cdr point) `(leave ,(- hl target-level)))))
+                    (let ((pexc (pop-exc-expr src-tokens target-tokens)))
+                      (if pexc (set-cdr! point (cons pexc (cdr point))))))))
               handler-goto-fixups)
     (if global-const-error
         (error (string "`global const` delcaration not allowed inside function" (format-loc global-const-error))))
