@@ -157,7 +157,7 @@ function Channel(func::Function; ctype=Any, csize=0, taskref=nothing)
     chnl = Channel{ctype}(csize)
     task = Task(() -> func(chnl))
     bind(chnl, task)
-    schedule(task)
+    yield(task) # immediately start it
 
     isa(taskref, Ref{Task}) && (taskref[] = task)
     return chnl
@@ -369,7 +369,7 @@ function put_unbuffered(c::Channel, v)
         end
     end
     taker = popfirst!(c.takers)
-    schedule(taker, v) # immediately give taker a chance to run but don't block the current task
+    yield(taker, v) # immediately give taker a chance to run but don't block the current task
     return v
 end
 

@@ -115,6 +115,7 @@ end
 
 throwto(t::Task, @nospecialize exc) = () # TODO: should throwto() still work? what if the task is running in another thread?
 
+
 else # !JULIA_PARTR
 
 
@@ -440,7 +441,7 @@ function AsyncCondition(cb::Function)
     end)
     # must start the task right away so that it can wait for the AsyncCondition before
     # we re-enter the event loop. this avoids a race condition. see issue #12719
-    schedule(waiter)
+    yield(waiter)
     return async
 end
 

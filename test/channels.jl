@@ -281,8 +281,9 @@ end
     end === testerr
 end
 
-#= TODO: this testset depends on task execution ordering and that makes no
+#= TODO: these tests depend on task execution ordering and that makes no
 # sense with threads!
+=#
 @testset "Timer / AsyncCondition triggering and race #12719" begin
     tc = Ref(0)
     t = Timer(0) do t
@@ -347,7 +348,6 @@ end
     sleep(0.1)
     @test tc[] == 1
 end
-=#
 
 @testset "check_channel_state" begin
     c = Channel(1)
