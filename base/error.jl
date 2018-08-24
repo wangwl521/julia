@@ -95,7 +95,7 @@ function catch_stack(; include_bt=true)
     raw = ccall(:jl_get_exc_stack, Any, (Cint,Cint), include_bt, typemax(Cint))
     formatted = Any[]
     stride = include_bt ? 3 : 1
-    for i = 1:stride:length(raw)
+    for i = reverse(1:stride:length(raw))
         e = raw[i]
         push!(formatted, include_bt ? (e,Base._reformat_bt(raw[i+1],raw[i+2])) : e)
     end
