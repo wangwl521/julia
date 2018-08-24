@@ -3716,7 +3716,7 @@ f(x) = yt(x)
                #f))
 
             ;; exception handlers are lowered using
-            ;; (enter L) - push handler with catch block at label L
+            ;; (= tok (enter L)) - push handler with catch block at label L
             ;; (leave n) - pop N exception handlers
             ;; (pop_exc tok) - pop exception stack back to state of associated enter
             ((trycatch tryfinally)
@@ -3727,14 +3727,16 @@ f(x) = yt(x)
                    (finally           (if (eq? (car e) 'tryfinally) (new-mutable-var) #f))
                    (finally-exception (if (eq? (car e) 'tryfinally) (new-mutable-var) #f))
                    (my-finally-handler #f))
+               ;; handler block entry
                (emit `(= ,handler-token (enter ,catch)))
                (set! handler-level (+ handler-level 1))
                (if finally (begin (set! my-finally-handler (list finally endl '() handler-level))
                                   (set! finally-handler my-finally-handler)
                                   (emit `(= ,finally -1))))
-               (let* ((v1  (compile (cadr e) break-labels value #f))
+               (let* ((v1  (compile (cadr e) break-labels value #f)) ;; emit try block code
                       (val (if (and value (not tail))
                                (new-mutable-var) #f)))
+                 ;; handler block postfix
                  (if (and val v1) (emit-assignment val v1))
                  (if tail
                      (begin (if v1 (emit-return v1))
@@ -3742,21 +3744,15 @@ f(x) = yt(x)
                      (begin (emit '(leave 1))
                             (emit `(goto ,endl))))
                  (set! handler-level (- handler-level 1))
-                 (set! catch-token-stack (cons handler-token catch-token-stack))
+                 ;; emit either catch or finally block
                  (mark-label catch)
                  (emit `(leave 1))
                  (if finally
-                     (begin (emit `(= ,finally-exception (the_exception)))
-                            (leave-finally-block `(foreigncall 'jl_rethrow_other (top Bottom) (call (core svec) Any)
-                                                               'ccall 1 ,finally-exception)
-                                                 #f))
-                     (let ((v2 (compile (caddr e) break-labels value tail)))
-                       (if val (emit-assignment val v2))
-                       (if (not tail) (emit `(pop_exc ,handler-token)))))
-                 (if endl (mark-label endl))
-                 (if finally
-                     (begin (set! finally-handler last-finally-handler)
+                     (begin (leave-finally-block '(call rethrow) #f)
+                            (if endl (mark-label endl))
+                            (set! finally-handler last-finally-handler)
                             (compile (caddr e) break-labels #f #f)
+                            ;; emit actions to be taken at exit of finally block
                             (let loop ((actions (caddr my-finally-handler)))
                               (if (pair? actions)
                                   (let ((skip (if (and tail (null? (cdr actions))
@@ -3773,8 +3769,14 @@ f(x) = yt(x)
                                             (else ;; assumed to be a rethrow
                                              (emit ac))))
                                     (if skip (mark-label skip))
-                                    (loop (cdr actions)))))))
-                 (set! catch-token-stack (cdr catch-token-stack))
+                                    (loop (cdr actions))))))
+                     (begin (set! catch-token-stack (cons handler-token catch-token-stack))
+                            (let ((v2 (compile (caddr e) break-labels value tail)))
+                              (if val (emit-assignment val v2))
+                              (if (not tail) (emit `(pop_exc ,handler-token)))
+                                             ;; else done in emit-return from compile
+                              (if endl (mark-label endl)))
+                            (set! catch-token-stack (cdr catch-token-stack))))
                  val)))
 
             ((newvar)
