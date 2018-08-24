@@ -313,7 +313,7 @@ JL_DLLEXPORT jl_value_t *jl_apply_with_saved_exception_state(jl_value_t **args, 
 
 void jl_copy_exc_stack(jl_exc_stack_t *dest, jl_exc_stack_t *src)
 {
-    assert(dest->reserve_size >= src->top);
+    assert(dest->reserved_size >= src->top);
     memcpy(jl_excstk_raw(dest), jl_excstk_raw(src), sizeof(uintptr_t)*src->top);
     dest->top = src->top;
 }

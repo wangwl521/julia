@@ -3709,14 +3709,14 @@ f(x) = yt(x)
                     (m (or m (let ((l (make-label)))
                                (put! label-map (cadr e) l)
                                l))))
-               (emit `(null))  ;; save space for `leave` and `pop_exc` that might be needed
+               (emit `(null))  ;; save space for `leave` that might be needed
                (emit `(goto ,m))
                (set! handler-goto-fixups
                      (cons (list code handler-level catch-token-stack (cadr e)) handler-goto-fixups))
                #f))
 
             ;; exception handlers are lowered using
-            ;; (= tok (enter L)) - push handler with catch block at label L
+            ;; (= tok (enter L)) - push handler with catch block at label L, yielding token
             ;; (leave n) - pop N exception handlers
             ;; (pop_exc tok) - pop exception stack back to state of associated enter
             ((trycatch tryfinally)

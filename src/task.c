@@ -267,8 +267,7 @@ static void NOINLINE JL_NORETURN JL_USED_FUNC start_task(void)
             res = jl_apply(&t->start, 1);
         }
         JL_CATCH {
-            // FIXME: Persist exception stack into `exception`?
-            // Refactor with jl_push_exc_stack above?
+            // TODO: Persist exception stack as above?
             res = jl_current_exception();
             t->exception = res;
             jl_gc_wb(t, res);
