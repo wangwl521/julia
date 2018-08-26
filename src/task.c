@@ -202,9 +202,15 @@ static void NOINLINE restore_stack(jl_ptls_t ptls, char *p)
 }
 #endif
 
-#ifndef JULIA_ENABLE_PARTR
+static void record_backtrace(void) JL_NOTSAFEPOINT
+{
+    jl_ptls_t ptls = jl_get_ptls_states();
+    ptls->bt_size = rec_backtrace(ptls->bt_data, JL_MAX_BT_SIZE);
+}
+
 static jl_function_t *task_done_hook_func=NULL;
 
+#ifndef JULIA_ENABLE_PARTR
 static void JL_NORETURN finish_task(jl_task_t *t, jl_value_t *resultval JL_MAYBE_UNROOTED)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
@@ -247,12 +253,6 @@ static void JL_NORETURN finish_task(jl_task_t *t, jl_value_t *resultval JL_MAYBE
     }
     gc_debug_critical_error();
     abort();
-}
-
-static void record_backtrace(void) JL_NOTSAFEPOINT
-{
-    jl_ptls_t ptls = jl_get_ptls_states();
-    ptls->bt_size = rec_backtrace(ptls->bt_data, JL_MAX_BT_SIZE);
 }
 
 static void NOINLINE JL_NORETURN JL_USED_FUNC start_task(void)
