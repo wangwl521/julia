@@ -596,6 +596,6 @@ function Timer(cb::Function, timeout::Real; interval::Real = 0.0)
     end)
     # must start the task right away so that it can wait for the Timer before
     # we re-enter the event loop. this avoids a race condition. see issue #12719
-    schedule(waiter)
+    yield(waiter)
     return t
 end
