@@ -221,7 +221,7 @@ function sync_end(refs)
     c_ex = CompositeException()
     for r in refs
         try
-            wait(r)
+            _wait(r)
         catch ex
             if !isa(r, Task) || (isa(r, Task) && !istaskfailed(r))
                 rethrow(ex)
