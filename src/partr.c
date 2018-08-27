@@ -858,36 +858,34 @@ JL_DLLEXPORT jl_task_t *jl_task_new_multi(jl_value_t *_args, int64_t count, jl_v
     }
 
     /* allocate (GRAIN_K * nthreads) tasks */
-    jl_task_t *task = NULL, *prev = task, *t = NULL;
+    jl_task_t *parent = NULL, *prev = NULL, *task = NULL;
     int64_t start = 0, end;
     for (int64_t i = 0;  i < n;  ++i) {
         end = start + each.quot + (i < each.rem ? 1 : 0);
 
-        t = (jl_task_t *)jl_gc_alloc(ptls, sizeof (jl_task_t), jl_task_type);
-        if (t == NULL)
-            return NULL;
+        task = (jl_task_t *)jl_gc_alloc(ptls, sizeof (jl_task_t), jl_task_type);
+        JL_GC_PUSH1(&task);
+        init_task(task, _args);
+        if (parent == NULL)
+            prev = parent = task;
 
-        JL_GC_PUSH1(&t);
-        init_task(t, _args);
-        if (task == NULL)
-            task = t;
-
-        t->start = start;
-        t->end = end;
-        t->parent = task;
-        t->grain_num = i;
-        t->arr = arr;
+        task->start = start;
+        task->end = end;
+        task->parent = parent;
+        task->grain_num = i;
+        task->arr = arr;
         if (_rargs != NULL) {
-            t->rargs = _rargs;
-            t->mredfunc = mredfunc;
-            t->rfptr = rfptr;
-            t->red = red;
+            task->rargs = _rargs;
+            task->mredfunc = mredfunc;
+            task->rfptr = rfptr;
+            task->red = red;
         }
 
-        if (t != task) {
-            prev->next = t;
-            prev = t;
+        if (prev != task) {
+            prev->next = task;
+            prev = task;
         }
+
         start = end;
     }
 
