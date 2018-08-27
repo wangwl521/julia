@@ -858,17 +858,29 @@ JL_DLLEXPORT jl_task_t *jl_task_new_multi(jl_value_t *_args, int64_t count, jl_v
     }
 
     /* allocate (GRAIN_K * nthreads) tasks */
-    jl_task_t *parent = NULL, *prev = NULL, *task = NULL;
-    int64_t start = 0, end;
-    for (int64_t i = 0;  i < n;  ++i) {
+    int64_t start = 0, end = start + each.quot + (each.rem ? 1 : 0);
+    jl_task_t *parent = (jl_task_t *)jl_gc_alloc(ptls, sizeof (jl_task_t), jl_task_type);
+    JL_GC_PUSH1(&parent);
+    init_task(parent, _args);
+    parent->start = start;
+    parent->end = end;
+    parent->grain_num = 0;
+    parent->arr = arr;
+    if (_rargs != NULL) {
+        parent->rargs = _rargs;
+        parent->mredfunc = mredfunc;
+        parent->rfptr = rfptr;
+        parent->red = red;
+    }
+    jl_task_t *prev = parent, *task = NULL;
+    start = end;
+    for (int64_t i = 1;  i < n;  ++i) {
         end = start + each.quot + (i < each.rem ? 1 : 0);
 
         task = (jl_task_t *)jl_gc_alloc(ptls, sizeof (jl_task_t), jl_task_type);
-        JL_GC_PUSH1(&task);
+        prev->next = task;
+        jl_gc_wb(prev, prev->next);
         init_task(task, _args);
-        if (parent == NULL)
-            prev = parent = task;
-
         task->start = start;
         task->end = end;
         task->parent = parent;
@@ -880,17 +892,12 @@ JL_DLLEXPORT jl_task_t *jl_task_new_multi(jl_value_t *_args, int64_t count, jl_v
             task->rfptr = rfptr;
             task->red = red;
         }
-
-        if (prev != task) {
-            prev->next = task;
-            prev = task;
-        }
-
+        prev = task;
         start = end;
     }
 
     JL_GC_POP();
-    return task;
+    return parent;
 }
 
 
