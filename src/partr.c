@@ -482,8 +482,8 @@ static void sync_grains(jl_task_t *task)
 
     /* reduce... */
     if (task->red) {
-        task->result = reduce(task->arr, task->red, task->rfptr, task->mredfunc,
-                              task->rargs, task->result, task->grain_num);
+        //task->result = reduce(task->arr, task->red, task->rfptr, task->mredfunc,
+        //                      task->rargs, task->result, task->grain_num);
         jl_gc_wb(task, task->result);
 
         /*  if this task is last, set the result in the parent task */
@@ -713,16 +713,10 @@ static void setup_task_fun(jl_value_t *_args,
 }
 
 
-/*  jl_task_new() -- create a task for `f(arg)`
-
-    The created task can then be spawned.
- */
-JL_DLLEXPORT jl_task_t *jl_task_new(jl_value_t *_args)
+// initialize a task
+static void init_task(jl_task_t *task, jl_value_t *_args)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
-
-    jl_task_t *task = (jl_task_t *)jl_gc_alloc(ptls, sizeof (jl_task_t), jl_task_type);
-    JL_GC_PUSH1(&task);
 
     task->args = _args;
     task->storage = jl_nothing;
@@ -766,6 +760,21 @@ JL_DLLEXPORT jl_task_t *jl_task_new(jl_value_t *_args)
 
     // set up entry point for this task
     init_task_entry(task, (char *)task->stkbuf);
+}
+
+
+/*  jl_task_new() -- create a task for `f(arg)`
+
+    The created task can then be spawned.
+ */
+JL_DLLEXPORT jl_task_t *jl_task_new(jl_value_t *_args)
+{
+    jl_ptls_t ptls = jl_get_ptls_states();
+
+    jl_task_t *task = (jl_task_t *)jl_gc_alloc(ptls, sizeof (jl_task_t), jl_task_type);
+    JL_GC_PUSH1(&task);
+
+    init_task(task, _args);
 
     JL_GC_POP();
     return task;
@@ -853,15 +862,15 @@ JL_DLLEXPORT jl_task_t *jl_task_new_multi(jl_value_t *_args, int64_t count, jl_v
     int64_t start = 0, end;
     for (int64_t i = 0;  i < n;  ++i) {
         end = start + each.quot + (i < each.rem ? 1 : 0);
-        if (task == NULL)
-            t = task = jl_task_new(_args);
-        else {
-            t = (jl_task_t *)jl_gc_alloc(ptls, sizeof (jl_task_t),
-                                         jl_task_type);
-            memcpy(t, task, sizeof (jl_task_t));
-        }
+
+        t = (jl_task_t *)jl_gc_alloc(ptls, sizeof (jl_task_t), jl_task_type);
         if (t == NULL)
             return NULL;
+
+        JL_GC_PUSH1(&t);
+        init_task(t, _args);
+        if (task == NULL)
+            task = t;
 
         t->start = start;
         t->end = end;
@@ -882,6 +891,7 @@ JL_DLLEXPORT jl_task_t *jl_task_new_multi(jl_value_t *_args, int64_t count, jl_v
         start = end;
     }
 
+    JL_GC_POP();
     return task;
 }
 

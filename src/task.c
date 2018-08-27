@@ -43,12 +43,14 @@ volatile int jl_in_stackwalk = 0;
 /* This probing code is derived from Douglas Jones' user thread library */
 static void _probe_arch(void);
 
-#ifndef __clang_analyzer__
-/* true if stack grows up, false if down */
-static int _stack_grows_up;
+static int mangle_pointers;
 
 /* the offset of the beginning of the stack frame in a function */
 static size_t _frame_offset;
+
+#ifndef __clang_analyzer__
+/* true if stack grows up, false if down */
+static int _stack_grows_up;
 
 struct _probe_data {
     intptr_t low_bound;         /* below probe on stack */
@@ -104,8 +106,6 @@ static void _infer_stack_direction(void)
     int first;
     _infer_direction_from(&first);
 }
-
-static int mangle_pointers;
 
 static void _probe_arch(void)
 {
