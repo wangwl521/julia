@@ -17,6 +17,9 @@ extern "C" {
 #ifdef JULIA_ENABLE_THREADING
 #ifdef JULIA_ENABLE_PARTR
 
+#ifdef JULIA_VALGRIND
+#include <valgrind/valgrind.h>
+#endif
 #include <sys/mman.h> // for mprotect
 
 // task states
@@ -757,6 +760,9 @@ static void init_task(jl_task_t *task, jl_value_t *_args)
     task->ssize = 128*1024;
     task->stkbuf = (void *)jl_gc_alloc_buf(ptls, task->ssize);
     jl_gc_wb_buf(task, task->stkbuf, task->ssize);
+#ifdef JULIA_VALGRIND
+    VALGRIND_STACK_REGISTER(task->stkbuf, task->stkbuf + task->ssize);
+#endif
 
     // set up entry point for this task
     init_task_entry(task, (char *)task->stkbuf);
