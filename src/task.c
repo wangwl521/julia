@@ -529,6 +529,9 @@ void init_task_entry(jl_task_t *t, char *stack)
 {
     if (jl_setjmp(t->ctx, 0)) {
 #ifdef JULIA_ENABLE_PARTR
+#ifdef JL_ASAN_ENABLED
+        __sanitizer_finish_switch_fiber(NULL, NULL, NULL);
+#endif
         task_wrapper();
 #else
         start_task();
