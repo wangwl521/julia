@@ -446,7 +446,7 @@ void jl_threadfun(void *arg)
     // set a jump context for this root task
     if(jl_setjmp(ptls->current_task->ctx, 0)) {
 #ifdef JL_ASAN_ENABLED
-       __sanitizer_finish_switch_fiber(NULL, NULL, NULL);
+       __sanitizer_finish_switch_fiber(ptls->current_task->fakestack, NULL, NULL);
 #endif
     }
 
@@ -689,7 +689,7 @@ static void JL_NORETURN run_next(void)
 #ifdef JL_ASAN_ENABLED
     size_t ssize = task->ssize;
     void *bottom = (void*) (((char*) task->stkbuf) + ssize);
-    __sanitizer_start_switch_fiber(NULL, bottom, ssize);
+    __sanitizer_start_switch_fiber(&task->fakestack, bottom, ssize);
 #endif
     jl_longjmp(task->ctx, 1);
 
@@ -1055,7 +1055,7 @@ JL_DLLEXPORT jl_value_t *jl_task_yield(int requeue)
             abort();
 	} else {
 #ifdef JL_ASAN_ENABLED
-           __sanitizer_finish_switch_fiber(NULL, NULL, NULL);
+           __sanitizer_finish_switch_fiber(ptls->current_task->fakestack, NULL, NULL);
 #endif
         }
     }

@@ -1702,6 +1702,9 @@ struct _jl_task_t {
     size_t ssize;
     size_t bufsz;
     void *stkbuf;
+//#ifdef JL_ASAN_ENABLED
+    void *fakestack;
+//#endif
 
     size_t started:1;
 
