@@ -767,7 +767,7 @@ static void init_task(jl_task_t *task, jl_value_t *_args)
 
     // TODO: need stack management
     // TODO: need stack protection page see task.c
-    task->ssize = 128*1024;
+    task->ssize = 65536*1024;
     task->stkbuf = (void *)jl_gc_alloc_buf(ptls, task->ssize);
     jl_gc_wb_buf(task, task->stkbuf, task->ssize);
 #ifdef JULIA_VALGRIND
